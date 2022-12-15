@@ -28,7 +28,7 @@ extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.mathjax",
     "sphinx.ext.viewcode",
-    "sphinxcontrib.napoleon",
+    "sphinx.ext.napoleon",
     "sphinxarg.ext",
     "myst_parser"
 ]
