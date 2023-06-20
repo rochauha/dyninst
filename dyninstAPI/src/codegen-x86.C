@@ -58,6 +58,47 @@ using namespace std;
 using namespace boost::assign;
 using namespace Dyninst::InstructionAPI;
 
+const bool kAMDGPU_CODEGEN = true;
+
+static void generateAMDGPUBranch(codeGen &gen, Address fromAddr,
+                                 Address toAddr) {
+
+  assert(kAMDGPU_CODEGEN);
+
+  fprintf(stderr, "fromAddr : %lu,    toAddr : %lu \n", fromAddr, toAddr);
+  fprintf(stderr, "size of instruction buffer : %u , capacity : %u\n\n",
+          gen.size(), gen.max());
+
+  GET_PTR(insn, gen);
+
+  // (if toAddr = 0xdeadbeefdeadbeee)
+  // s_mov_b32 s2, 0xdeadbeef    ; encoding:   [0xff,0x00,0x82,0xbe,0xef,0xbe,0xad,0xde]
+  // s_mov_b32 s3, 0xdeadbeee    ; encoding:   [0xff,0x00,0x83,0xbe,0xee,0xbe,0xad,0xde]
+  append_memory_as_byte(insn, 0xff);
+  append_memory_as_byte(insn, 0x00);
+  append_memory_as_byte(insn, 0x82);
+  append_memory_as_byte(insn, 0xbe);
+  append_memory_as(insn, uint32_t{(toAddr >> 31)}); // deadbeef
+  SET_PTR(insn, gen);
+
+  append_memory_as_byte(insn, 0xff);
+  append_memory_as_byte(insn, 0x00);
+  append_memory_as_byte(insn, 0x83);
+  append_memory_as_byte(insn, 0xbe);
+  append_memory_as(insn, uint32_t{toAddr}); // deadbee
+  SET_PTR(insn, gen);
+
+  // FIXME: toAddr doesn't correspond to address of .dyninstInst section
+
+  // s_setpc_b64 s[2:3]             ; encoding: [0x02,0x1d,0x80,0xbe]
+  append_memory_as_byte(insn, 0x02);
+  append_memory_as_byte(insn, 0x1d);
+  append_memory_as_byte(insn, 0x80);
+  append_memory_as_byte(insn, 0xbe);
+  SET_PTR(insn, gen);
+
+  return;
+}
 
 #define MODRM_MOD(x) ((x) >> 6)
 #define MODRM_RM(x) ((x) & 7)
@@ -214,6 +255,12 @@ void insnCodeGen::generateTrap(codeGen &gen) {
 void insnCodeGen::generateBranch(codeGen &gen,
                                  Address fromAddr, Address toAddr)
 {
+  // A better way could be to check if e_machine is EM_AMDGPU in the ELF header
+  if (kAMDGPU_CODEGEN) {
+    generateAMDGPUBranch(gen, fromAddr, toAddr);
+    return;
+  }
+
   GET_PTR(insn, gen);
   long disp;
 
